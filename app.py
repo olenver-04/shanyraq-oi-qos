@@ -173,37 +173,96 @@ def public_urls():
     return base, base + "?view=student", base + "?view=admin"
 
 
-def shanyrak_svg(cx=700, cy=435):
-    """Draw a lightweight vector shanyrak that stays sharp on the projector."""
-    rays = []
-    for a in range(0, 360, 22):
-        radians = math.radians(a)
-        x1, y1 = cx + 83 * math.cos(radians), cy + 83 * math.sin(radians)
-        x2, y2 = cx + 115 * math.cos(radians), cy + 115 * math.sin(radians)
-        rays.append(
-            f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
-            'stroke="#D6A559" stroke-width="7" stroke-linecap="round"/>'
+def shanyrak_svg(cx=800, cy=505):
+    """A richly detailed, hand-drawn-style Kazakh wooden shanyrak (pure SVG)."""
+    # Uyk sockets are part of the shanyrak's carved wooden outer rim.
+    sockets = []
+    for angle in range(0, 360, 15):
+        theta = math.radians(angle)
+        xo, yo = cx + 172 * math.cos(theta), cy + 172 * math.sin(theta)
+        xi, yi = cx + 149 * math.cos(theta), cy + 149 * math.sin(theta)
+        sockets.append(
+            f'<path d="M {xi:.1f} {yi:.1f} L {xo:.1f} {yo:.1f}" '
+            'stroke="#754527" stroke-width="8" stroke-linecap="round"/>'
+            f'<circle cx="{xo:.1f}" cy="{yo:.1f}" r="4" fill="#D4A45B"/>'
         )
-    lines = []
-    # Interlaced wood lattice, clipped to the interior circle.
-    for d in (-42, -14, 14, 42):
-        lines.append(f'<line x1="{cx+d}" y1="{cy-77}" x2="{cx+d}" y2="{cy+77}"/>')
-        lines.append(f'<line x1="{cx-77}" y1="{cy+d}" x2="{cx+77}" y2="{cy+d}"/>')
+
+    carved = []
+    for deg in range(0, 360, 30):
+        carved.append(
+            f'<g transform="translate({cx} {cy}) rotate({deg}) translate(0 -146)">'
+            '<path d="M-7 0 C-11 -7 -7 -13 -1 -11 C5 -9 4 -3 -1 -4 '
+            'M7 0 C11 -7 7 -13 1 -11 C-5 -9 -4 -3 1 -4" '
+            'stroke="#704528" stroke-width="2.7" fill="none" stroke-linecap="round"/>'
+            '<circle r="1.8" fill="#FBDEA1"/></g>'
+        )
+
+    # Slightly curved wooden kuldireuish laths, rather than a flat square grid.
+    lattice = []
+    for offset in (-60, -30, 0, 30, 60):
+        y = cy + offset
+        x = cx + offset
+        lattice.append(
+            f'<path d="M {cx-122} {y} Q {cx} {y-12} {cx+122} {y}" '
+            'stroke="#694127" stroke-width="17" fill="none" stroke-linecap="round"/>'
+            f'<path d="M {cx-122} {y-3} Q {cx} {y-15} {cx+122} {y-3}" '
+            'stroke="url(#wood-lattice)" stroke-width="11" fill="none" stroke-linecap="round"/>'
+        )
+        lattice.append(
+            f'<path d="M {x} {cy-122} Q {x+10} {cy} {x} {cy+122}" '
+            'stroke="#694127" stroke-width="17" fill="none" stroke-linecap="round"/>'
+            f'<path d="M {x-3} {cy-122} Q {x+7} {cy} {x-3} {cy+122}" '
+            'stroke="url(#wood-lattice)" stroke-width="11" fill="none" stroke-linecap="round"/>'
+        )
+
+    grain = []
+    # Subtle natural grain grooves running along the outside hoop.
+    for rr, opacity in ((151, .55), (159, .28)):
+        grain.append(f'<circle cx="{cx}" cy="{cy}" r="{rr}" fill="none" '
+                     f'stroke="#F8D99A" stroke-width="1.5" opacity="{opacity}"/>')
+
     return f'''
     <defs>
-      <radialGradient id="shglow"><stop stop-color="#E6C57D" stop-opacity=".32"/>
-        <stop offset="1" stop-color="#E6C57D" stop-opacity="0"/></radialGradient>
-      <clipPath id="shclip"><circle cx="{cx}" cy="{cy}" r="75"/></clipPath>
+      <radialGradient id="shanyrak-glow">
+        <stop offset="0" stop-color="#EAC58C" stop-opacity=".34"/>
+        <stop offset=".6" stop-color="#E8BB75" stop-opacity=".13"/>
+        <stop offset="1" stop-color="#D5AB6A" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="wood-rim" x1=".15" x2=".95" y1="0" y2="1">
+        <stop offset="0" stop-color="#F9D995"/>
+        <stop offset=".18" stop-color="#C68B4B"/>
+        <stop offset=".47" stop-color="#925727"/>
+        <stop offset=".7" stop-color="#D5A664"/>
+        <stop offset="1" stop-color="#7B4426"/>
+      </linearGradient>
+      <linearGradient id="wood-lattice" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#F3CE8F"/>
+        <stop offset=".48" stop-color="#C88E54"/>
+        <stop offset="1" stop-color="#A26437"/>
+      </linearGradient>
+      <radialGradient id="shanyrak-sky" cx=".5" cy=".48" r=".75">
+        <stop offset="0" stop-color="#467B68"/>
+        <stop offset=".9" stop-color="#173F39"/>
+        <stop offset="1" stop-color="#143A35"/>
+      </radialGradient>
+      <clipPath id="shanyrak-lattice-clip"><circle cx="{cx}" cy="{cy}" r="115"/></clipPath>
     </defs>
-    <circle cx="{cx}" cy="{cy}" r="142" fill="url(#shglow)" />
-    <circle cx="{cx}" cy="{cy}" r="119" fill="#FAF4E5" stroke="#C69245" stroke-width="11"/>
-    <circle cx="{cx}" cy="{cy}" r="107" fill="none" stroke="#E5CA96" stroke-width="3"/>
-    {''.join(rays)}
-    <circle cx="{cx}" cy="{cy}" r="81" fill="#24594B" stroke="#D6A559" stroke-width="8"/>
-    <g clip-path="url(#shclip)" stroke="#E9CF96" stroke-width="10" stroke-linecap="round">
-    {''.join(lines)}</g>
-    <circle cx="{cx}" cy="{cy}" r="78" fill="none" stroke="#EBD6AD" stroke-width="4"/>
-    <circle cx="{cx}" cy="{cy}" r="8" fill="#FFF3D1"/>
+    <circle cx="{cx}" cy="{cy}" r="225" fill="url(#shanyrak-glow)" />
+    <circle cx="{cx}" cy="{cy+11}" r="180" fill="#744A31" opacity=".13"/>
+    {''.join(sockets)}
+    <circle cx="{cx}" cy="{cy}" r="163" fill="#AB743D" stroke="#714222" stroke-width="7"/>
+    <circle cx="{cx}" cy="{cy}" r="154" fill="none" stroke="url(#wood-rim)" stroke-width="22"/>
+    <circle cx="{cx}" cy="{cy}" r="139" fill="none" stroke="#F1CF8D" stroke-width="3"/>
+    <circle cx="{cx}" cy="{cy}" r="136" fill="#E6BC7B" stroke="#7C4A2B" stroke-width="4"/>
+    <circle cx="{cx}" cy="{cy}" r="121" fill="url(#shanyrak-sky)" stroke="#713E29" stroke-width="7"/>
+    <circle cx="{cx}" cy="{cy}" r="114" fill="none" stroke="#F9E3B0" stroke-width="2" opacity=".8"/>
+    <g clip-path="url(#shanyrak-lattice-clip)">{''.join(lattice)}</g>
+    <circle cx="{cx}" cy="{cy}" r="121" fill="none" stroke="#C98A45" stroke-width="7"/>
+    <circle cx="{cx}" cy="{cy}" r="130" fill="none" stroke="#FFF0BE" stroke-width="2" opacity=".8"/>
+    {''.join(carved)}
+    {''.join(grain)}
+    <circle cx="{cx}" cy="{cy}" r="11" fill="#9B612D" stroke="#EFCB82" stroke-width="4"/>
+    <circle cx="{cx}" cy="{cy}" r="3" fill="#FFF2C7"/>
     '''
 
 
@@ -236,11 +295,11 @@ def cluster_svg(rows, fresh_ids: set[int]):
     chronological = list(reversed(list(rows)))[:DISPLAY_LIMIT]
     rays, labels, ornaments = [], [], []
     palette = (
-        ('#BF8D4C', '#FFF6E3'),
-        ('#34856C', '#E8F5EC'),
-        ('#9972A2', '#F7EEFA'),
-        ('#BD7664', '#FFF0E9'),
-        ('#5A809F', '#EAF3FC'),
+        ('#9E6036', '#FFF1D9'),
+        ('#397365', '#EAF2E7'),
+        ('#955B51', '#FFF0E7'),
+        ('#826A45', '#FBF2E3'),
+        ('#586B88', '#F0F1EB'),
     )
 
     for item, (x, y, angle) in zip(chronological, slots):
@@ -257,7 +316,7 @@ def cluster_svg(rows, fresh_ids: set[int]):
         vx, vy = x - cx, y - cy
         distance = math.hypot(vx, vy)
         ux, uy = vx / distance, vy / distance
-        start_x, start_y = cx + ux * 132, cy + uy * 132
+        start_x, start_y = cx + ux * 172, cy + uy * 172
         # End behind the word so the card appears physically attached to the ray.
         end_x, end_y = x - ux * 22, y - uy * 22
         tooltip = escaped(f'{name} — {word}')
@@ -265,10 +324,10 @@ def cluster_svg(rows, fresh_ids: set[int]):
             f'<g class="ray{css_fresh}">'
             f'<line x1="{start_x:.1f}" y1="{start_y:.1f}" '
             f'x2="{end_x:.1f}" y2="{end_y:.1f}" '
-            'stroke="#B17C38" stroke-width="7" stroke-linecap="round" opacity=".58"/>'
+            'stroke="#70462A" stroke-width="10" stroke-linecap="round" opacity=".9"/>'
             f'<line x1="{start_x:.1f}" y1="{start_y:.1f}" '
             f'x2="{end_x:.1f}" y2="{end_y:.1f}" '
-            'stroke="#F6DDB0" stroke-width="2.5" stroke-linecap="round" opacity=".85"/>'
+            'stroke="#C99A58" stroke-width="6" stroke-linecap="round" opacity=".98"/>'
             '</g>'
         )
         # Individual tags show the word ON the end of its ray (not floating nearby).
@@ -276,9 +335,9 @@ def cluster_svg(rows, fresh_ids: set[int]):
             f'<g class="word-petal{css_fresh}" transform="translate({x:.1f} {y:.1f})" '
             'role="group" tabindex="0">'
             f'<title>{tooltip}</title>'
-            '<rect x="-87" y="-34" width="174" height="68" rx="23" '
-            f'fill="{paper}" stroke="{accent}" stroke-width="2.1"/>'
-            f'<path d="M-60,-34 Q0,-47 60,-34" fill="none" stroke="{accent}" '
+            '<rect x="-87" y="-34" width="174" height="68" rx="19" '
+            f'fill="{paper}" stroke="{accent}" stroke-width="2.5"/>'
+            f'<path d="M-60,-35 Q0,-43 60,-35" fill="none" stroke="{accent}" '
             'stroke-width="2.1" opacity=".6"/>'
             f'<circle cx="-69" cy="-19" r="4" fill="{accent}"/>'
             f'<circle cx="69" cy="-19" r="4" fill="{accent}"/>'
@@ -290,13 +349,19 @@ def cluster_svg(rows, fresh_ids: set[int]):
             '</g>'
         )
 
-    # Repeat small national motifs in the corners; do not obscure the branches.
-    for px, py in ((65, 70), (1535, 70), (65, 940), (1535, 940)):
+    # Stylized qoşqarmüyiz (ram's horn) motif: four symmetric corner engravings.
+    for px, py, flip_x, flip_y in ((85, 80, 1, 1), (1515, 80, -1, 1),
+                                  (85, 930, 1, -1), (1515, 930, -1, -1)):
         ornaments.append(
-            f'<g opacity=".40" transform="translate({px} {py})" fill="none" '
-            'stroke="#B68B4B" stroke-width="3">'
-            '<path d="M-17 0 Q-17 -17 0 -17 Q17 -17 17 0 Q17 17 0 17 Q-9 17 -9 7"/>'
-            '<circle r="4" fill="#B68B4B" stroke="none"/></g>'
+            f'<g transform="translate({px} {py}) scale({flip_x} {flip_y})" '
+            'fill="none" stroke="#B8834B" stroke-width="4" stroke-linecap="round" opacity=".72">'
+            '<path d="M0 0 C40 -34 76 -10 59 22 C48 41 19 25 33 13 '
+            'C45 6 47 21 40 23"/>'
+            '<path d="M0 0 C-40 -34 -76 -10 -59 22 C-48 41 -19 25 -33 13 '
+            'C-45 6 -47 21 -40 23"/>'
+            '<path d="M0 -5 L0 -30 M-7 -22 L0 -33 L7 -22"/>'
+            '<path d="M0 8 L9 19 L0 30 L-9 19 Z" fill="#CBA66C" stroke="none"/>'
+            '</g>'
         )
 
     label = f'{len(chronological)} оқушының ойы' if chronological else 'Жауаптар әлі жоқ'
@@ -336,10 +401,10 @@ def render_cluster(rows, fresh_ids: set[int]):
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&display=swap');
       :root { --sans: 'Noto Sans', 'DejaVu Sans', sans-serif; }
-      html, body { padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden; background: #FFFEF8; }
+      html, body { padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden; background: #FBF0DF; }
       .cluster-holder { width: 100%; height: 100%; box-sizing: border-box;
-        border: 1px solid #E5DAC4; border-radius: 26px;
-        overflow: hidden; background: #FFFEF8; }
+        border: 1px solid #CFA974; border-radius: 26px;
+        overflow: hidden; background: #FBF0DF; }
       .cluster-canvas { display: block; width: 100%; height: 100%; }
       .branch-word { font-family: var(--sans); font-size: 20px; font-weight: 800; letter-spacing: -.015em; }
       .branch-name { font-family: var(--sans); font-size: 13px; font-weight: 800; }
