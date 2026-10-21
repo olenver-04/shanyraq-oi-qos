@@ -54,7 +54,7 @@ TOPICS = {
         "pale": "#F0ECF8",
     },
 }
-DISPLAY_LIMIT = 36
+DISPLAY_LIMIT = 40
 
 
 @contextmanager
@@ -206,76 +206,122 @@ def shanyrak_svg(cx=700, cy=435):
     '''
 
 
-def cluster_svg(rows, fresh_ids: set[int]):
-    """Responsive SVG: collision-free radial halo with readable name/word bubbles."""
-    W, H, CX, CY = 1400, 870, 700, 435
-    # Collision-free halo slots: visual radial graph without word cards overlapping.
-    # Keep a clear area in the middle for the shanyrak, and enough spacing for 36 words.
-    x_positions = [108, 306, 504, 702, 900, 1098, 1296]
-    y_positions = [87, 175, 263, 351, 439, 527, 615, 703, 791]
-    slots = []
-    for row_index, yy in enumerate(y_positions):
-        for col_index, xx in enumerate(x_positions):
-            if row_index in (3, 4, 5) and col_index in (2, 3, 4):
-                continue  # Central shanyrak must remain fully visible.
-            if row_index == 6 and col_index == 3:
-                continue  # Leave breathing room for the center caption.
-            distance = math.hypot(xx - CX, (yy - CY) * 1.15)
-            angle = (math.atan2(yy - CY, xx - CX) + math.pi / 2) % (2 * math.pi)
-            slots.append((distance, angle, xx, yy))
-    # Fill the cluster from the center outward, distributing nodes in all directions.
-    slots.sort(key=lambda s: (int(s[0] / 85), int(s[1] / (math.pi / 2)), s[0], s[1]))
-    ordered = list(reversed(list(rows)))
-    palette = (
-        ("#AC7943", "#FFF2DE"), ("#277B70", "#E7F3ED"),
-        ("#80669B", "#F0ECF8"), ("#B56851", "#FFF0E9"),
+def ray_slots():
+    """Forty carefully spaced positions on three concentric rings around the yurt roof.
+
+    Each response sits on the end of a visible uyk-style wooden spoke.  These
+    coordinates keep labels legible on a 16:10 classroom projector.
+    """
+    cx, cy = 800, 505
+    rings = (
+        (10, 286, 255, math.radians(144.2)),
+        (14, 440, 352, math.radians(193.1)),
+        (16, 613, 442, math.radians(65.3)),
     )
-    links, nodes = [], []
-    for row, (_, _, x, y) in zip(ordered, slots):
-        word = " ".join(row["message"].split())
-        short_word = word if len(word) <= 18 else word[:17].rstrip() + "…"
-        name = " ".join(row["student_name"].split())
-        short_name = name if len(name) <= 19 else name[:18].rstrip() + "…"
-        # The native <title> tooltip reveals full text, with no JS required.
-        tooltip = escaped(f'{name} · {word}')
-        safe_word, safe_name = escaped(short_word), escaped(short_name)
-        color, pale = palette[(int(row["id"]) - 1) % len(palette)]
-        is_fresh = int(row["id"]) in fresh_ids
-        fresh_cls = ' new' if is_fresh else ''
-        links.append(
-            f'<line class="cluster-link{fresh_cls}" x1="{CX}" y1="{CY}" '
-            f'x2="{x:.1f}" y2="{y:.1f}" stroke="{color}" opacity=".30" '
-            'stroke-width="2.5" stroke-dasharray="6 9"/>'
+    slots = []
+    for count, radius_x, radius_y, phase in rings:
+        for idx in range(count):
+            angle = phase + 2 * math.pi * idx / count
+            dx = radius_x * math.cos(angle)
+            dy = radius_y * math.sin(angle)
+            slots.append((cx + dx, cy + dy, angle))
+    return slots
+
+
+def cluster_svg(rows, fresh_ids: set[int]):
+    """Draw one radiating branch per student, each with a name and a word."""
+    width, height, cx, cy = 1600, 1010, 800, 505
+    slots = ray_slots()
+    chronological = list(reversed(list(rows)))[:DISPLAY_LIMIT]
+    rays, labels, ornaments = [], [], []
+    palette = (
+        ('#BF8D4C', '#FFF6E3'),
+        ('#34856C', '#E8F5EC'),
+        ('#9972A2', '#F7EEFA'),
+        ('#BD7664', '#FFF0E9'),
+        ('#5A809F', '#EAF3FC'),
+    )
+
+    for item, (x, y, angle) in zip(chronological, slots):
+        item_id = int(item['id'])
+        word = ' '.join(item['message'].split())
+        name = ' '.join(item['student_name'].split())
+        shown_word = word if len(word) <= 18 else word[:17].rstrip() + '…'
+        shown_name = name if len(name) <= 20 else name[:19].rstrip() + '…'
+        accent, paper = palette[(item_id - 1) % len(palette)]
+        is_new = item_id in fresh_ids
+        css_fresh = ' fresh' if is_new else ''
+
+        # Gold uyk/ray: start at the outer edge of the center shanyrak.
+        vx, vy = x - cx, y - cy
+        distance = math.hypot(vx, vy)
+        ux, uy = vx / distance, vy / distance
+        start_x, start_y = cx + ux * 132, cy + uy * 132
+        # End behind the word so the card appears physically attached to the ray.
+        end_x, end_y = x - ux * 22, y - uy * 22
+        tooltip = escaped(f'{name} — {word}')
+        rays.append(
+            f'<g class="ray{css_fresh}">'
+            f'<line x1="{start_x:.1f}" y1="{start_y:.1f}" '
+            f'x2="{end_x:.1f}" y2="{end_y:.1f}" '
+            'stroke="#B17C38" stroke-width="7" stroke-linecap="round" opacity=".58"/>'
+            f'<line x1="{start_x:.1f}" y1="{start_y:.1f}" '
+            f'x2="{end_x:.1f}" y2="{end_y:.1f}" '
+            'stroke="#F6DDB0" stroke-width="2.5" stroke-linecap="round" opacity=".85"/>'
+            '</g>'
         )
-        nodes.append(
-            f'<g class="cluster-node{fresh_cls}" transform="translate({x:.1f} {y:.1f})" '
+        # Individual tags show the word ON the end of its ray (not floating nearby).
+        labels.append(
+            f'<g class="word-petal{css_fresh}" transform="translate({x:.1f} {y:.1f})" '
             'role="group" tabindex="0">'
             f'<title>{tooltip}</title>'
-            '<rect x="-96" y="-34" width="192" height="68" rx="24" '
-            f'fill="{pale}" stroke="{color}" stroke-width="2"/>'
-            f'<circle cx="-79" cy="-17" r="4" fill="{color}"/>'
-            f'<text class="cluster-word" x="0" y="-3" text-anchor="middle" fill="#234439">{safe_word}</text>'
-            f'<text class="cluster-name" x="0" y="20" text-anchor="middle" fill="{color}">✦ {safe_name}</text>'
+            '<rect x="-87" y="-34" width="174" height="68" rx="23" '
+            f'fill="{paper}" stroke="{accent}" stroke-width="2.1"/>'
+            f'<path d="M-60,-34 Q0,-47 60,-34" fill="none" stroke="{accent}" '
+            'stroke-width="2.1" opacity=".6"/>'
+            f'<circle cx="-69" cy="-19" r="4" fill="{accent}"/>'
+            f'<circle cx="69" cy="-19" r="4" fill="{accent}"/>'
+            f'<text class="branch-word" x="0" y="-2" text-anchor="middle" '
+            f'fill="#204D40" textLength="{min(150, max(1,len(shown_word))*9.7):.0f}" '
+            f'lengthAdjust="spacingAndGlyphs">{escaped(shown_word)}</text>'
+            f'<text class="branch-name" x="0" y="22" text-anchor="middle" '
+            f'fill="{accent}">{escaped(shown_name)}</text>'
             '</g>'
         )
 
-    label = f"{len(rows)} оқушының ойы" if rows else "Кластер әзірге бос"
-    svg = (
+    # Repeat small national motifs in the corners; do not obscure the branches.
+    for px, py in ((65, 70), (1535, 70), (65, 940), (1535, 940)):
+        ornaments.append(
+            f'<g opacity=".40" transform="translate({px} {py})" fill="none" '
+            'stroke="#B68B4B" stroke-width="3">'
+            '<path d="M-17 0 Q-17 -17 0 -17 Q17 -17 17 0 Q17 17 0 17 Q-9 17 -9 7"/>'
+            '<circle r="4" fill="#B68B4B" stroke="none"/></g>'
+        )
+
+    label = f'{len(chronological)} оқушының ойы' if chronological else 'Жауаптар әлі жоқ'
+    return (
         '<div class="cluster-holder">'
-        '<svg class="cluster-canvas" xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {W} {H}" role="img" aria-label="Шаңырақ айналасындағы интерактивті сөздер: {escaped(label)}">'
-        '<defs><pattern id="tiny-dots" width="42" height="42" patternUnits="userSpaceOnUse">'
-        '<circle cx="4" cy="4" r="1" fill="#D8DDC9"/></pattern></defs>'
-        '<rect x="0" y="0" width="1400" height="870" rx="30" fill="#FFFEF8"/>'
-        '<rect x="0" y="0" width="1400" height="870" rx="30" fill="url(#tiny-dots)"/>'
-        '<ellipse cx="700" cy="435" rx="575" ry="358" fill="none" stroke="#EADFC8" stroke-dasharray="4 12"/>'
-        '<ellipse cx="700" cy="435" rx="465" ry="307" fill="none" stroke="#EDE6D6" stroke-dasharray="4 14"/>'
-        '<ellipse cx="700" cy="435" rx="348" ry="240" fill="none" stroke="#F1EBDD" stroke-dasharray="4 13"/>'
-        + ''.join(links) + shanyrak_svg(CX, CY) + ''.join(nodes) +
-        '<text class="center-caption" x="700" y="580" text-anchor="middle">БІР ШАҢЫРАҚ · МЫҢ ОЙ</text>'
-        '</svg></div>'
+        f'<svg class="cluster-canvas" xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{escaped(label)}">'
+        '<defs>'
+        '<radialGradient id="warm-paper"><stop stop-color="#FFFFFF"/>'
+        '<stop offset="1" stop-color="#FBF5E8"/></radialGradient>'
+        '<pattern id="soft-dots" width="50" height="50" patternUnits="userSpaceOnUse">'
+        '<circle cx="4" cy="4" r="1.1" fill="#D5C3A0" opacity=".38"/></pattern>'
+        '</defs>'
+        '<rect x="0" y="0" width="1600" height="1010" rx="30" fill="url(#warm-paper)"/>'
+        '<rect x="0" y="0" width="1600" height="1010" rx="30" fill="url(#soft-dots)"/>'
+        '<ellipse cx="800" cy="505" rx="630" ry="451" fill="none" '
+        'stroke="#D9C29A" stroke-width="1.5" stroke-dasharray="2 14" opacity=".5"/>'
+        '<ellipse cx="800" cy="505" rx="450" ry="358" fill="none" '
+        'stroke="#D9C29A" stroke-dasharray="2 13" opacity=".4"/>'
+        + ''.join(ornaments)
+        + ''.join(rays)
+        + shanyrak_svg(cx, cy)
+        + ''.join(labels)
+        + '</svg></div>'
     )
-    return svg
 
 
 CSS = r'''
@@ -300,18 +346,19 @@ html,body,[data-testid="stMarkdownContainer"], .stApp input, .stApp textarea,.st
 .qr-head{font-weight:800;color:#2B6752;font-size:1rem;text-align:center;line-height:1.6}
 .topic-strip {display:flex;flex-wrap:wrap;gap:10px;padding:6px 0 12px}
 .topic-chip{border:1px solid #DADDCB;border-radius:999px;background:#FFFEF9;padding:8px 13px;color:#285849;font-size:.87rem;font-weight:700}
-.cluster-holder {width:100%;border:1px solid #E7E0D0;border-radius:28px;overflow:hidden;box-shadow:0 18px 38px #1C49371A;background:#FFFEF8}
-.cluster-canvas{display:block;width:100%;height:auto;max-height:78vh;min-height:420px;}
-.cluster-word{font-family:var(--sans);font-size:17px;font-weight:800;letter-spacing:-.01em}
-.cluster-name{font-family:var(--sans);font-size:12px;font-weight:700}
-.center-caption{font-family:var(--sans);font-size:13px;font-weight:800;letter-spacing:.18em;fill:#9D7139}
-.cluster-node{cursor:help;outline:none;transition:filter .2s}
-.cluster-node:hover,.cluster-node:focus{filter:drop-shadow(0 4px 9px #1B4A3C44)}
-.cluster-node:hover rect,.cluster-node:focus rect{stroke-width:4}
-.cluster-node.new{animation:word-pop 650ms cubic-bezier(.2,1.4,.35,1) both;transform-box:fill-box;transform-origin:center}
-.cluster-link.new{animation:link-grow 700ms ease-out both}
-@keyframes word-pop {0%{opacity:0;scale:.68}65%{opacity:1;scale:1.08}100%{opacity:1;scale:1}}
-@keyframes link-grow {from{opacity:0;stroke-dashoffset:50}to{opacity:.30;stroke-dashoffset:0}}
+ .cluster-holder {width:100%;border:1px solid #E5DAC4;border-radius:28px;overflow:hidden;box-shadow:0 18px 38px #1C49371A;background:#FFFEF8}
+.cluster-canvas{display:block;width:100%;height:auto;max-height:80vh;min-height:430px}
+.branch-word{font-family:var(--sans);font-size:20px;font-weight:800;letter-spacing:-.015em}
+.branch-name{font-family:var(--sans);font-size:13px;font-weight:800}
+.center-caption{font-family:var(--sans);font-size:14px;font-weight:800;letter-spacing:.17em;fill:#9D7139}
+.word-petal{cursor:help;outline:none;filter:drop-shadow(0 4px 6px #7B684024)}
+.word-petal:hover,.word-petal:focus{filter:drop-shadow(0 5px 12px #1B4A3C66)}
+.word-petal:hover rect,.word-petal:focus rect{stroke-width:3.5}
+.word-petal.fresh{animation:branch-pop .85s cubic-bezier(.16,1.5,.37,1) both;transform-box:fill-box;transform-origin:center}
+.ray.fresh{animation:ray-appear .9s ease-out both}
+@keyframes branch-pop {0%{opacity:0;scale:.65}60%{opacity:1;scale:1.10}100%{scale:1}}
+@keyframes ray-appear{0%{opacity:0}100%{opacity:1}}
+
 .live {display:inline-flex;gap:9px;align-items:center;background:#E4F3E8;border:1px solid #BCD9C4;color:#1F6E54;border-radius:999px;padding:9px 13px;font-size:.76rem;font-weight:800;white-space:nowrap}
 .live:before{content:'';width:8px;height:8px;background:#40AA7C;border-radius:50%;box-shadow:0 0 0 5px #67B69738}
 .stat-line{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:12px 0}
@@ -326,8 +373,8 @@ html,body,[data-testid="stMarkdownContainer"], .stApp input, .stApp textarea,.st
 .stButton button,.stDownloadButton button,.stLinkButton a{border-radius:13px;font-weight:700}
 .tip{color:#5A7667;font-size:.86rem;line-height:1.7;margin:12px 0}
 .footer-text{text-align:center;color:#9C7442;font-weight:800;letter-spacing:.08em;font-size:.8rem;margin:27px 0}
-@media(max-width:760px){.block-container{padding:1rem .75rem 2rem}.hero{padding:24px 22px;min-height:unset;border-radius:21px}.hero h1{font-size:2.2rem}.hero::after{right:-24px;font-size:11rem}.cluster-canvas{min-height:unset;max-height:unset}.cluster-word{font-size:17px}}
-@media(prefers-reduced-motion:reduce){.cluster-node.new,.cluster-link.new{animation:none}}
+@media(max-width:760px){.block-container{padding:1rem .75rem 2rem}.hero{padding:24px 22px;min-height:unset;border-radius:21px}.hero h1{font-size:2.2rem}.hero::after{right:-24px;font-size:11rem}.cluster-canvas{min-height:unset;max-height:unset}.branch-word{font-size:20px}}
+@media(prefers-reduced-motion:reduce){.word-petal.fresh,.ray.fresh{animation:none}}
 </style>
 '''
 
@@ -355,7 +402,7 @@ def wall_page(student_url: str):
         st.image(qr_image(student_url), use_container_width=True)
         st.link_button("✍️ Ойымды қосу", student_url, use_container_width=True)
     st.markdown('<div class="kicker">БІЗДІҢ ОРТАҚ КЛАСТЕРІМІЗ</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Әр сөз — шаңырақтың бір сәулесі ✨</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Әр ой — шаңырақтың бір уығы ✨</div>', unsafe_allow_html=True)
 
     @st.fragment(run_every="2s")
     def live_cluster():
@@ -370,13 +417,13 @@ def wall_page(student_url: str):
             '<div class="stat-line">'
             f'<div class="wall-count">💬 Барлық жауап: <b>{total}</b>'
             f' &nbsp; · &nbsp; Кластерде: <b>{len(latest)}</b></div>'
-            '<div class="live">ЖАНДЫ КЛАСТЕР · 2 СЕК</div></div>', unsafe_allow_html=True,
+            '<div class="live">ЖАНДЫ ШАҢЫРАҚ · 2 СЕК</div></div>', unsafe_allow_html=True,
         )
         st.html(cluster_svg(latest, fresh))
         if total == 0:
-            st.markdown('<div class="empty-hint">🌿 Бірінші сөзді қосатын кім? QR-кодты сканерлеп, өз ойыңды жібер!</div>', unsafe_allow_html=True)
+            st.markdown('<div class="empty-hint">🌿 Шаңырақ жаңа ойларды күтіп тұр! QR-кодты сканерлеп, өз сөзіңді қос.</div>', unsafe_allow_html=True)
         if total > DISPLAY_LIMIT:
-            st.caption(f"Кластерде соңғы {DISPLAY_LIMIT} ой көрсетіледі. Барлық {total} жауап мұғалімнің панелінде сақталады (сервер қайта іске қосылғанша).")
+            st.caption(f"Шаңырақта соңғы {DISPLAY_LIMIT} ой көрсетіледі. Барлық {total} жауап мұғалімнің панелінде сақталады (сервер қайта іске қосылғанша).")
         with st.expander("📜 Ойларды тізім түрінде көру"):
             for r in latest:
                 st.markdown(f'**🌿 {escaped(r["student_name"])}:** {escaped(r["message"])}')
@@ -390,14 +437,14 @@ def student_page(wall_url: str):
     st.markdown(
         '<div class="hero"><div class="eyebrow">🌿 СӘЛЕМ, ЖАС ЖАСАМПАЗ!</div>'
         '<h1>Шаңыраққа <em>өз ойыңды қос!</em></h1>'
-        '<p>Бір сөз немесе қысқа тіркес жаз. Сенің жауабың ортақ кластерге қосылады.</p></div>',
+        '<p>Бір сөз немесе қысқа тіркес жаз. Сөзің шаңырақтың бір уығына айналады!</p></div>',
         unsafe_allow_html=True,
     )
     left, right = st.columns([1.8, 1], gap="large")
     with left:
         st.markdown('<div class="form-note"><strong>💡 Қалай қатысамын?</strong>'
                     '1. Атыңды жаз.<br>2. Сабақтан есте қалған бір сөз немесе қысқа ой жаз.<br>'
-                    '3. «Шаңыраққа қосу» батырмасын бас. Ойың ортақ кластерде пайда болады.</div>',
+                    '3. «Шаңыраққа қосу» батырмасын бас. Сөзің шаңырақтың бір уығында пайда болады.</div>',
                     unsafe_allow_html=True)
         with st.form("cluster_form", clear_on_submit=False):
             name = st.text_input("👤 Атың", placeholder="Мысалы: Айдана", max_chars=40)
@@ -488,9 +535,9 @@ def admin_page(wall_url: str):
         st.info("Әзірге жауап жоқ.")
 
     st.divider()
-    st.subheader("🧹 Кластерді тазалау")
+    st.subheader("🧹 Шаңырақты тазалау")
     confirm = st.checkbox("Иә, барлық жауаптарды біржола жойғым келеді.")
-    if st.button("Кластерді тазалау", disabled=not confirm or not all_rows):
+    if st.button("Шаңырақты тазалау", disabled=not confirm or not all_rows):
         clear_responses("all")
         st.rerun()
     st.info("Бұл тегін Streamlit Cloud серверінде SQLite уақытша сақталады. Қайта іске қосқанда жауаптар жойылуы мүмкін: сабақ соңында CSV жүктеңіз.")
