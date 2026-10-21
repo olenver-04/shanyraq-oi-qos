@@ -19,6 +19,7 @@ from pathlib import Path
 
 import qrcode
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="Шаңыраққа ой қос! · Білім кластері",
@@ -324,6 +325,43 @@ def cluster_svg(rows, fresh_ids: set[int]):
     )
 
 
+def render_cluster(rows, fresh_ids: set[int]):
+    """Display the SVG inside an explicit-height frame.
+
+    Streamlit st.html sanitizes inline SVG in some versions, leaving an empty
+    space. The framed HTML renderer preserves SVG and supports hover and CSS
+    animations, while an explicit height prevents iframe clipping.
+    """
+    embedded_css = r"""
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&display=swap');
+      :root { --sans: 'Noto Sans', 'DejaVu Sans', sans-serif; }
+      html, body { padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden; background: #FFFEF8; }
+      .cluster-holder { width: 100%; height: 100%; box-sizing: border-box;
+        border: 1px solid #E5DAC4; border-radius: 26px;
+        overflow: hidden; background: #FFFEF8; }
+      .cluster-canvas { display: block; width: 100%; height: 100%; }
+      .branch-word { font-family: var(--sans); font-size: 20px; font-weight: 800; letter-spacing: -.015em; }
+      .branch-name { font-family: var(--sans); font-size: 13px; font-weight: 800; }
+      .center-caption { font-family: var(--sans); font-size: 14px; font-weight: 800; letter-spacing: .17em; fill: #9D7139; }
+      .word-petal { cursor: help; outline: none; filter: drop-shadow(0 4px 6px #7B684024); }
+      .word-petal:hover, .word-petal:focus { filter: drop-shadow(0 5px 12px #1B4A3C66); }
+      .word-petal:hover rect, .word-petal:focus rect { stroke-width: 3.5; }
+      .word-petal.fresh { animation: branch-pop .85s cubic-bezier(.16,1.5,.37,1) both;
+        transform-box: fill-box; transform-origin: center; }
+      .ray.fresh { animation: ray-appear .9s ease-out both; }
+      @keyframes branch-pop { 0% {opacity:0; scale:.65} 60% {opacity:1; scale:1.10} 100% {scale:1} }
+      @keyframes ray-appear { from {opacity:0} to {opacity:1} }
+      @media (prefers-reduced-motion:reduce) { .word-petal.fresh,.ray.fresh {animation:none} }
+    </style>
+    """
+    markup = (
+        '<!DOCTYPE html><html lang="kk"><head><meta charset="utf-8">'
+        + embedded_css + '</head><body>' + cluster_svg(rows, fresh_ids) + '</body></html>'
+    )
+    components.html(markup, height=770, scrolling=False)
+
+
 CSS = r'''
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&family=Noto+Serif:wght@500;600;700;800&display=swap');
@@ -338,6 +376,9 @@ html,body,[data-testid="stMarkdownContainer"], .stApp input, .stApp textarea,.st
 .hero::after{content:'✦';position:absolute;font-size:16rem;color:#E6CB9430;right:35px;top:-85px;pointer-events:none}
 .hero h1 {position:relative;z-index:1;font-family:var(--serif);font-weight:800;font-size:clamp(2rem,4.3vw,3.8rem);line-height:1.27;color:#fff9ec;margin:9px 0 12px}
 .hero h1 em{color:#F3D49B;font-style:normal}
+.hero-wall{min-height:unset;padding:22px 29px;}
+.hero-wall h1{font-size:clamp(1.85rem,3.2vw,3rem);margin:7px 0;}
+.hero-wall p{font-size:.93rem;line-height:1.6;}
 .hero p {font-size:1rem;color:#E6F1E8;line-height:1.8;max-width:810px;margin:0}
 .kicker {font-size:.78rem;font-weight:800;letter-spacing:.085em;color:#A77336;margin-top:23px}
 .section-title{font-family:var(--serif);font-size:clamp(1.6rem,2.3vw,2.35rem);font-weight:700;color:#174C3E;line-height:1.4;margin:4px 0 8px}
@@ -391,7 +432,7 @@ def wall_page(student_url: str):
     a, b = st.columns([4.5, 1.25], gap="large", vertical_alignment="center")
     with a:
         st.markdown(
-            '<div class="hero"><div class="eyebrow">✦ ҚАЗАҚ ТІЛІ · ҰЛТТЫҚ МҰРА</div>'
+            '<div class="hero hero-wall"><div class="eyebrow">✦ ҚАЗАҚ ТІЛІ · ҰЛТТЫҚ МҰРА</div>'
             '<h1>Шаңыраққа <em>ой қос!</em> 🏡</h1>'
             '<p>Киіз үй – ғажап сәулет туындысы. Дизайн өнерінің даму тарихы. '
             'Тырнақша, жақша, нүктелі үтір.</p></div>',
@@ -419,7 +460,7 @@ def wall_page(student_url: str):
             f' &nbsp; · &nbsp; Кластерде: <b>{len(latest)}</b></div>'
             '<div class="live">ЖАНДЫ ШАҢЫРАҚ · 2 СЕК</div></div>', unsafe_allow_html=True,
         )
-        st.html(cluster_svg(latest, fresh))
+        render_cluster(latest, fresh)
         if total == 0:
             st.markdown('<div class="empty-hint">🌿 Шаңырақ жаңа ойларды күтіп тұр! QR-кодты сканерлеп, өз сөзіңді қос.</div>', unsafe_allow_html=True)
         if total > DISPLAY_LIMIT:
