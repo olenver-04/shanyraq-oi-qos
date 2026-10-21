@@ -145,11 +145,10 @@ def csv_safe(value: str):
 def export_csv(rows):
     out = StringIO()
     writer = csv.writer(out)
-    writer.writerow(["№", "Оқушының аты", "Тақырып", "Негізгі сөз / ой", "Уақыты (UTC)"])
+    writer.writerow(["№", "Оқушының аты", "Негізгі сөз / ой", "Уақыты (UTC)"])
     for item in rows:
-        topic = TOPICS.get(item["activity"], {})
         writer.writerow([
-            item["id"], csv_safe(item["student_name"]), topic.get("title", "—"),
+            item["id"], csv_safe(item["student_name"]),
             csv_safe(item["message"]), item["created_at"],
         ])
     return out.getvalue().encode("utf-8-sig")
@@ -227,18 +226,20 @@ def cluster_svg(rows, fresh_ids: set[int]):
     # Fill the cluster from the center outward, distributing nodes in all directions.
     slots.sort(key=lambda s: (int(s[0] / 85), int(s[1] / (math.pi / 2)), s[0], s[1]))
     ordered = list(reversed(list(rows)))
+    palette = (
+        ("#AC7943", "#FFF2DE"), ("#277B70", "#E7F3ED"),
+        ("#80669B", "#F0ECF8"), ("#B56851", "#FFF0E9"),
+    )
     links, nodes = [], []
     for row, (_, _, x, y) in zip(ordered, slots):
-        key = row["activity"]
-        style = TOPICS.get(key, TOPICS["reflection"])
         word = " ".join(row["message"].split())
         short_word = word if len(word) <= 18 else word[:17].rstrip() + "…"
         name = " ".join(row["student_name"].split())
         short_name = name if len(name) <= 19 else name[:18].rstrip() + "…"
         # The native <title> tooltip reveals full text, with no JS required.
-        tooltip = escaped(f'{name} · {word} · {style["title"]}')
+        tooltip = escaped(f'{name} · {word}')
         safe_word, safe_name = escaped(short_word), escaped(short_name)
-        color, pale = style["color"], style["pale"]
+        color, pale = palette[(int(row["id"]) - 1) % len(palette)]
         is_fresh = int(row["id"]) in fresh_ids
         fresh_cls = ' new' if is_fresh else ''
         links.append(
@@ -355,9 +356,6 @@ def wall_page(student_url: str):
         st.link_button("✍️ Ойымды қосу", student_url, use_container_width=True)
     st.markdown('<div class="kicker">БІЗДІҢ ОРТАҚ КЛАСТЕРІМІЗ</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Әр сөз — шаңырақтың бір сәулесі ✨</div>', unsafe_allow_html=True)
-    st.markdown('<div class="topic-strip">' + ''.join(
-        f'<span class="topic-chip">{v["emoji"]} {escaped(v["title"])}</span>' for v in TOPICS.values()
-    ) + '</div>', unsafe_allow_html=True)
 
     @st.fragment(run_every="2s")
     def live_cluster():
@@ -381,8 +379,7 @@ def wall_page(student_url: str):
             st.caption(f"Кластерде соңғы {DISPLAY_LIMIT} ой көрсетіледі. Барлық {total} жауап мұғалімнің панелінде сақталады (сервер қайта іске қосылғанша).")
         with st.expander("📜 Ойларды тізім түрінде көру"):
             for r in latest:
-                topic = TOPICS.get(r["activity"], TOPICS["reflection"])
-                st.markdown(f'**{topic["emoji"]} {escaped(r["student_name"])}:** {escaped(r["message"])}')
+                st.markdown(f'**🌿 {escaped(r["student_name"])}:** {escaped(r["message"])}')
 
     live_cluster()
     st.markdown('<div class="footer-text">✦ БІР ШАҢЫРАҚ АСТЫНДА — БІРЛІК ПЕН БІЛІМ ✦</div>', unsafe_allow_html=True)
@@ -399,24 +396,21 @@ def student_page(wall_url: str):
     left, right = st.columns([1.8, 1], gap="large")
     with left:
         st.markdown('<div class="form-note"><strong>💡 Қалай қатысамын?</strong>'
-                    '1. Атыңды жаз.<br>2. Тақырыпты таңда.<br>'
-                    '3. Бір маңызды сөз немесе қысқа тіркес жібер. Ол шаңырақтың айналасында пайда болады.</div>',
+                    '1. Атыңды жаз.<br>2. Сабақтан есте қалған бір сөз немесе қысқа ой жаз.<br>'
+                    '3. «Шаңыраққа қосу» батырмасын бас. Ойың ортақ кластерде пайда болады.</div>',
                     unsafe_allow_html=True)
         with st.form("cluster_form", clear_on_submit=False):
             name = st.text_input("👤 Атың", placeholder="Мысалы: Айдана", max_chars=40)
-            topic = st.radio(
-                "🎯 Қай тақырыпқа ой қосасың?", list(TOPICS),
-                format_func=lambda key: TOPICS[key]["emoji"] + " " + TOPICS[key]["title"],
-            )
             word = st.text_input(
                 "✨ Бір сөз немесе қысқа тіркес",
-                placeholder="Мысалы: Бірлік, Шаңырақ, Ұлттық ою...",
+                placeholder="Мысалы: Бірлік, Шаңырақ, Ою-өрнек...",
                 max_chars=42,
             )
             submitted = st.form_submit_button("🌟 Шаңыраққа қосу", type="primary", use_container_width=True)
         if submitted:
             try:
-                add_response(name, topic, word)
+                # Keep the original database schema, without asking students to select a topic.
+                add_response(name, "reflection", word)
             except ValueError:
                 st.warning("Атыңды (кемі 2 әріп) және бір сөзіңді (2–42 таңба) дұрыс толтыр.")
             except sqlite3.Error:
@@ -428,12 +422,12 @@ def student_page(wall_url: str):
         st.markdown('<div class="tip">🌿 Өз ойыңды жаз. Атың мен сөзің проектордан көрсетіледі.</div>', unsafe_allow_html=True)
     with right:
         st.markdown('<div class="kicker">ОЙЛАНУҒА КӨМЕК</div>', unsafe_allow_html=True)
-        for item in TOPICS.values():
-            st.markdown(
-                f'<div class="form-note"><strong>{item["emoji"]} {escaped(item["title"])}</strong>'
-                f'{escaped(item["question"])}<br><small>{escaped(item["examples"])}</small></div>',
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            '<div class="form-note"><strong>🌿 Қандай сөз есіңде қалды?</strong>'
+            'Киіз үй, ұлттық өнер, дизайн немесе тыныс белгілері туралы ойыңды жаз.'
+            '<br><small>Мысалы: Шаңырақ · Бірлік · Мұра · Ою-өрнек · Тырнақша</small></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def admin_password():
@@ -468,12 +462,8 @@ def admin_page(wall_url: str):
         st.session_state["admin_authorized"] = False
         st.rerun()
 
-    counts = topic_counts()
-    cols = st.columns(4)
-    cols[0].metric("🌿 Барлығы", sum(counts.values()))
-    for i, (key, meta) in enumerate(TOPICS.items(), 1):
-        cols[i].metric(f'{meta["emoji"]} {meta["title"]}', counts[key])
     all_rows = list_responses()
+    st.metric("🌿 Барлық жауап", len(all_rows))
 
     st.subheader("📥 Жауаптарды сақтау")
     st.download_button(
@@ -481,7 +471,7 @@ def admin_page(wall_url: str):
         data=export_csv(all_rows), file_name="shanyraq_cluster_zhauaptar.csv",
         mime="text/csv", use_container_width=True, disabled=not all_rows,
     )
-    st.caption("CSV ішінде оқушы аты, тақырып, жазылған ой мен уақыты бар.")
+    st.caption("CSV ішінде оқушының аты, жазылған ойы мен уақыты бар.")
 
     st.divider()
     st.subheader("🗑️ Бір жауапты өшіру")
@@ -499,13 +489,9 @@ def admin_page(wall_url: str):
 
     st.divider()
     st.subheader("🧹 Кластерді тазалау")
-    scope = st.selectbox(
-        "Қай бөлікті тазалаймыз?", ["all", *TOPICS],
-        format_func=lambda key: "🌿 Барлық жауаптар" if key == "all" else TOPICS[key]["title"],
-    )
-    confirm = st.checkbox("Иә, осы жауаптарды біржола жойғым келеді.")
+    confirm = st.checkbox("Иә, барлық жауаптарды біржола жойғым келеді.")
     if st.button("Кластерді тазалау", disabled=not confirm or not all_rows):
-        clear_responses(scope)
+        clear_responses("all")
         st.rerun()
     st.info("Бұл тегін Streamlit Cloud серверінде SQLite уақытша сақталады. Қайта іске қосқанда жауаптар жойылуы мүмкін: сабақ соңында CSV жүктеңіз.")
     st.link_button("↗ Ортақ экран", wall_url)
